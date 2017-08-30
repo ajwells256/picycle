@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 
+import os
 import RPi.GPIO as gpio
 import time
 import datetime
 import sys
+import math
 
 # some notes about the setup
 # whether I use pullup or pulldown, the power loss occurs through the reed switch
@@ -122,11 +124,64 @@ def formatDatapoint(dp):
 
 def writeNewFile(filepath, data):
     file = open(filepath, "w");
+    file.write(getDistanceGraph(data, 7));
     file.write("Total Distance\t|\tAverage Speed\t| Instantaneous Distance| Instaneous Speed\t|\tTime\n");
     file.write("_"*105 + "\n");
     for point in data:
         file.write(formatDatapoint(point) + "\n");
     file.close();
     return;
+
+
+# begin stats functions, pick and choose at will
+def getAve(dataList): #returns float
+    endOfList = len(dataList);
+    return dataList[endOfList-1].aveSpeed;
+
+def getDuration(dataList): #returns string
+    endOfList = len(dataList);
+    return dataList[endOfList-1].time;
+
+def getInstSpeedGraph(dataList, height):
+    coords = [];
+    for point in dataList:
+        coords.append((point.secondsElapsed, point.instSpeed));
+    return graph(coords, height);
+
+def getDistanceGraph(dataList, height):
+    coords = [];
+    for point in dataList:
+        coords.append((point.secondsElapsed, point.totalDist));
+    return graph(coords, height);
+
+def graph(coords, height):
+    _, columns = os.popen('stty size', 'r').read().split(); # gets screen width for the graph, who cares about rows
+    maxCoord = max(coords, key=lambda x: x[1]); # yes, that is lambda notation. Compares using the second (y) coord
+    maxVal = maxCoord[1];
+    truncate = math.ceil(len(coords)/int(columns));
+    truncatedCoords = [];
+    for i in range(0, len(coords), truncate):
+        truncatedCoords.append(coords[i]);
+    # this is to make the graph fit on one line, just drop data until there's enough
+    arr = [[0 for i in range(len(truncatedCoords))] for j in range(height)]; # initializes 2d array for temporary storage of bitfield
+    # this should speed up the Big O of this function, since I iterate 2 times over one big array (xn where x is small and constant) 
+    # instead of n times over an array or size n.
+    # access arr using [y][x] notation
+    for i in range(len(truncatedCoords)):
+        coord = truncatedCoords[i];
+        for j in range(int(round(height*coord[1]/maxVal))):
+            arr[height-1-j][i] = 1;
+    
+    buildString = ""
+    for line in arr:
+        for bool in line:
+            if(bool):
+                buildString += "#";
+            else:
+                buildString += " ";
+        buildString += "\n";
+    
+    return buildString;
+
 main();
 
